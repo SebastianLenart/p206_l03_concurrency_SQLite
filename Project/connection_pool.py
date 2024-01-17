@@ -1,3 +1,4 @@
+import os.path
 import threading
 import time
 from queue import Empty, Queue, Full
@@ -7,15 +8,19 @@ from os import getenv, environ
 from dotenv import load_dotenv
 import psycopg2
 
+import sqlite3
+from sqlite3 import Error
+
 
 # zapytanie SQL ktre pokazuje liczbe otwartych polaczen aktualnych
-# SELECT * FROM pg_stat_activity;
+# SELECT * FROM pg_stat_activity; -->> tylko postgresql
 
 class ConnectionPool:
     def __init__(self, time_check=3, standard_amount_of_connections=10):
-        load_dotenv()
+        # load_dotenv()
+        self.db_params = None
         self.read_db_param()
-        self.database_uri = environ["DATABASE_URL"]
+        # self.database_uri = environ["DATABASE_URL"]
         self.time_check = time_check
         self.standard_amount_of_connections = standard_amount_of_connections
         self.max_connections = 90
@@ -26,12 +31,7 @@ class ConnectionPool:
         self.init_connections()
 
     def read_db_param(self):
-        self.db_params = {
-            "dbname": getenv("DB_NAME", "postgres"),
-            "user": getenv("DB_USER", "postgres"),
-            "password": getenv("DB_PASSWORD", "1234"),
-            "host": getenv("DB_HOST", "localhost")
-        }
+        self.db_params = os.path.abspath("/home/sebastian/GitHub/p206_l03_concurrency_SQLite/Project/sqlite.db")
 
     def init_connections(self):
         while self.queue.qsize() < self.min_connections:
@@ -46,6 +46,7 @@ class ConnectionPool:
                     conn.close()
                     print("xxactive:", self.active_connections)
                     print("xxqueuesieze:", self.queue.qsize())
+            print("CHECK_AMOUNT_OF_CONNECTIONS")
             time.sleep(40)
 
     def get_connection(self):
@@ -63,14 +64,19 @@ class ConnectionPool:
             return conn
 
     def add_connection_to_queue(self, param_db):
-        if isinstance(param_db, dict) and self.active_connections < self.max_connections:
+        if isinstance(param_db, str) and self.active_connections < self.max_connections:
             # add new connection
-            print("disc")
-            self.queue.put(psycopg2.connect(**param_db))
+            print("string path")
+            conn = None
+            try:
+                conn = sqlite3.connect(param_db, check_same_thread=False)
+            except Error as e:
+                print("Error SQL", e)
+            self.queue.put(conn)
             return True
-        elif isinstance(param_db, psycopg2.extensions.connection) and self.queue.qsize() < self.max_connections:
+        elif isinstance(param_db, sqlite3.Connection) and self.queue.qsize() < self.max_connections:
             # add old connection
-            print("put")
+            print("puuuuuuttttttt")
             self.queue.put(param_db)
             return True
         else:

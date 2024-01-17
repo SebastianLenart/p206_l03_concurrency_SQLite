@@ -1,5 +1,5 @@
 from connect_sql import GetConnection
-import database
+import database_sqlite
 from threading import Thread
 from time import perf_counter
 import time
@@ -10,7 +10,7 @@ from connection_pool import ConnectionPool, TooMuchConnections
 def show_list_users2(connection):
     try:
         conn = connection.get_connection()
-        return_list = [element[0] for element in database.get_list_nicks2(conn)]
+        return_list = [element[0] for element in database_sqlite.get_list_nicks2(conn)]
         connection.release_connection(conn)
         print(return_list)
         return return_list

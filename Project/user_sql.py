@@ -1,8 +1,9 @@
 from connect_sql import GetConnection
-import database
+import database_sqlite
 import json
 from pprint import pprint
 import datetime
+from connection_pool import ConnectionPool, TooMuchConnections
 
 
 class User:
@@ -14,15 +15,15 @@ class User:
         self.admin = None
         self.messages = None
         self.users_file = None
-        self.connection_db = connection_db
+        self.connection_db = connection_db.get_connection() # qlbo przy kazej funkcji indywidualnie
 
     # add to new user can only admin
     def register_new_user(self, nick="Default", password="1234", admin=False):
-        with GetConnection() as connection:
+        try:
             if not self.admin:
                 print(f"Only admin can add new user!")
                 return f"Only admin can add new user!"
-            for user in database.get_list_nicks(connection):
+            for user in database_sqlite.get_list_nicks(self.connection_db):
                 if user[0] == nick:
                     return f"This nick is busy."
             new_user = {
@@ -30,37 +31,52 @@ class User:
                 "password": password,
                 "admin": admin
             }
-            return_value = database.add_new_user(connection, **new_user)
+            return_value = database_sqlite.add_new_user(self.connection_db, **new_user)
             pprint(return_value)
             return f"Register done!"
+        except TooMuchConnections:
+            print("To much connections")
+            return "To much connections"
 
     def show_list_users(self):
-        with GetConnection() as connection:
-            return [element[0] for element in database.get_list_nicks(connection)]
+        try:
+            return [element[0] for element in database_sqlite.get_list_nicks(self.connection_db)]
+        except TooMuchConnections:
+            print("To much connections")
+            return "To much connections"
 
     def show_base_info_about(self, nick):
         if not self.admin:
             return f"Only admin can get info!"
-        with GetConnection() as connection:
-            return database.get_base_info(connection, nick)
+        try:
+            return database_sqlite.get_base_info(self.connection_db, nick)
+        except TooMuchConnections:
+            print("To much connections")
 
     def login(self, nick: str = "Default", password: str = "1234"):
-        with GetConnection() as connection:
-            if nick not in [element[0] for element in database.get_list_nicks(connection)]:
+        try:
+            if nick not in [element[0] for element in database_sqlite.get_list_nicks(self.connection_db)]:
                 return f"Not found user {nick}"
-            user = database.get_base_info(connection, nick)  # powyzsze linijki sa zbedne przy tym zapisie..
+            user = database_sqlite.get_base_info(self.connection_db,
+                                                 nick)  # powyzsze linijki sa zbedne przy tym zapisie..
             if user[0] == nick and user[1] == password:
                 self.set_data_from_db(*user)
                 return f"Login"
-        return f"Password is wrong"
+            return f"Password is wrong"
+        except TooMuchConnections:
+            print("To much connections")
+            return "To much connections"
 
     def check_user_exists(self, nick="Olaf"):
-        with GetConnection() as connection:
-            for user in database.get_list_nicks(connection):
+        try:
+            for user in database_sqlite.get_list_nicks(self.connection_db):
                 if user[0] == nick:
                     return True
             # raise SomethingWrong(f"Not found user {nick}")
             return False
+        except TooMuchConnections:
+            print("To much connections")
+            return "To much connections"
 
     def set_data_from_db(self, nick="default", password="default", admin="False"):
         self.nick = nick
@@ -84,45 +100,58 @@ class User:
         return sorted_messagesv2
 
     def sort_messages_by_date(self, from_nick="Olaf"):
-        with GetConnection() as connection:
-            messages_from_sb = database.get_conversation_by_nick(connection, self.nick, from_nick)
+        try:
+            messages_from_sb = database_sqlite.get_conversation_by_nick(self.connection_db, self.nick, from_nick)
             # messages_from_sb_sort_reverse = sorted(messages_from_sb, key=lambda x: x[4], reverse=True)
             # pprint(messages_from_sb_sort_reverse)
             return messages_from_sb
+        except TooMuchConnections:
+            print("To much connections")
+            return "To much connections"
 
     def check_unread_messages(self):
-        with GetConnection() as connection:
-            counter_unread = database.get_counter_unread_messages(
-                connection, self.nick)
+        try:
+            counter_unread = database_sqlite.get_counter_unread_messages(
+                self.connection_db, self.nick)
             if len(counter_unread) == 0:
                 return []
             for unread in counter_unread:
                 print(f"You {unread[0]} have {unread[2]} messages from {unread[1]}")
             return counter_unread
+        except TooMuchConnections:
+            print("To much connections")
+            return "To much connections"
 
     def read_unread_messages(self):
-        with GetConnection() as connection:
-            unread_messages = database.get_unread_messages(connection)
+        try:
+            unread_messages = database_sqlite.get_unread_messages(self.connection_db)
             unread_messages3 = []
             for text in unread_messages:
                 print(f"{text[0]} have unread message(s) from {text[3]}: {text[4]}")
-                database.update_unread_message(connection, text[2])
+                database_sqlite.update_unread_message(self.connection_db, text[2])
                 unread_messages3.append(tuple([text[0], "from", text[3], text[4]]))
             unread_messages2 = list(map(lambda x: x[0], unread_messages))
             if len(unread_messages) == 0:
                 return ["You dont have unread texts"]
-        return unread_messages3
+            return unread_messages3
+        except TooMuchConnections:
+            print("To much connections")
+            return "To much connections"
 
     def check_bufor_in_receiver(self, nick="Olaf"):
-        with GetConnection() as connection:
+        try:
             try:
-                counter_unread_messages = database.get_counter_unread_messages_with_sb(connection, self.nick, nick)
+                counter_unread_messages = database_sqlite.get_counter_unread_messages_with_sb(self.connection_db,
+                                                                                              self.nick, nick)
                 print(counter_unread_messages[2])
             except IndexError:
                 counter_unread_messages = 0
             if counter_unread_messages >= self.BUFOR_MESSAGES:
                 return True
             return False
+        except TooMuchConnections:
+            print("To much connections")
+            return "To much connections"
 
     def send_text_to(self, send_to_nick="Olaf", text: list = [str(datetime.datetime.now()), "sth"]):
         if not self.check_user_exists(send_to_nick):
@@ -130,24 +159,31 @@ class User:
         if self.check_bufor_in_receiver(send_to_nick):
             return f"Bufor is full, you cant sent text"
 
-        with GetConnection() as connection:
-            sender_or_receiver = database.determine_sender_or_receiver(connection)[0]
+        try:
+            sender_or_receiver = database_sqlite.determine_sender_or_receiver(self.connection_db)[0]
             text.insert(0, f"{sender_or_receiver[1]}")
             if not self.check_do_u_have_this_nick_in_conversation(send_to_nick):
                 print("You dont have this nick in conversation, Now it's going to be added")
-                print(database.add_conversation(connection, self.nick, send_to_nick))
-            id_conversation = database.get_id_conversation(connection, self.nick, send_to_nick)
-            print("id_message", database.add_message(connection, text[:], id_conversation))
+                print(database_sqlite.add_conversation(self.connection_db, self.nick, send_to_nick))
+            id_conversation = database_sqlite.get_id_conversation(self.connection_db, self.nick, send_to_nick)
+            print("id_message", database_sqlite.add_message(self.connection_db, text[:], id_conversation))
             return f"Send ok"
+        except TooMuchConnections:
+            print("To much connections")
+            return "To much connections"
 
     def check_do_u_have_this_nick_in_conversation(self, nick="Olaf"):
-        with GetConnection() as connection:
-            list_users = database.get_nicks_conversation(connection,
-                                                         self.nick)  # dodaj self.nick ale dopiero po zalogowaniu!!!
+        try:
+            list_users = database_sqlite.get_nicks_conversation(self.connection_db,
+                                                                self.nick)  # dodaj self.nick ale dopiero po zalogowaniu!!!
             for user in list_users:
                 if nick == user[0]:
                     return True
             return False
+        except TooMuchConnections:
+            print("To much connections")
+            return "To much connections"
+
 
 
 if __name__ == '__main__':
