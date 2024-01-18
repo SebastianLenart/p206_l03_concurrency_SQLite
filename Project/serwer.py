@@ -77,6 +77,7 @@ list of users - only login user can see list of users
             "show_unread_texts": self.show_unread_texts
         }
         try:
+            print("DATA", data)
             dict_options[data[0]](*data[1:])
         except KeyError:
             self.default_answer()
@@ -131,7 +132,7 @@ list of users - only login user can see list of users
 
     def logout(self):
         del self.user
-        self.user = User()
+        self.user = User(self.connection_db)
         self.answer_to_send = {"command": "Nie rozpoznano polecenia", "answer": "logout", "nick": "default",
                                "password": "", "admin": "default", "messages": ""}
         print("Logout")
